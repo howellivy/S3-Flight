@@ -506,15 +506,15 @@ void logit(uint8_t  x) {
 //      approx =  in time
 //---------------------------------------------------------------
 void logit_string() {                           //store string
-  Logfile = SD.open("syslog.txt", FILE_WRITE); //open syslog file
-  if (Logfile) {                            //can open the file
-    Logfile.println();                    //add a carrage return/line feed
-    delayMicroseconds(100);               //wait 100 microsec
-    for (uint8_t x = 0x20; x < 128; x++) { //print a string to log file
-      Logfile.write(x);                   //write one charator at a time
-    }                                     //close string
-  }                                         //close the open log file
-  else {                                       //or else
+  Logfile = SD.open("syslog.txt", FILE_WRITE);  //open syslog file
+  if (Logfile) {                                //can open the file
+    Logfile.println();                          //add a carrage return/line feed
+    delayMicroseconds(100);                     //wait 100 microsec
+    for (uint8_t x = 0x20; x < 128; x++) {      //print a string to log file
+      Logfile.write(x);                         //write one charator at a time
+    }                                           //close string
+  }                                             //close the open log file
+  else {                                        //or else
     Serial.println("\r\nlogit error");          //error can not open log file
   }                                            //close error else
   Logfile.close();                             //close the log file
