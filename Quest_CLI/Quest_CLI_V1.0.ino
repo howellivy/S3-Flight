@@ -39,6 +39,8 @@
                   Run flight with Serial and SPI cameras.
   20230710  CLI_32 repaired Timeout by removing Logit next to text out, irq looks good now, eremoved multiple write to
                   user_text buffer text size same now.. Need to clean up code for humans..
+  20231120 CLI_V1.0 Required to make a complete program - this file, CLI_V1.0,Quest_CLI.h, Quest_Flight.h,Quest_flight.cpp
+                  cmd_takeSphot , cmd_takeSpiphoto, nophotophoto, nophoto30K --,clean up code for understanding.
 
  * *****************************************************************************
 */
@@ -60,7 +62,7 @@ const char source_file[] = __FILE__;
 #include "Quest_RTClib.h"
 #include "Quest_Que.h"          //20230517 hai
 #include "Quest_test.h"
-//
+#include "Nophoto.h"
 #include "Quest_command.h"
 #include "Quest_CLI.h"
 #include "Quest_Flight.h"
@@ -168,6 +170,10 @@ const char* Quefile[15];
 //
 #define USER_TEXT_BUF_SIZE   1024                               //Text buffer 0
 char user_text_buf0 [USER_TEXT_BUF_SIZE] = "USER TEXT\r\n";     //Test Buffer 0
+//
+//  Nophoto information
+char databuffer[30000];         // Create a character buffer with a size of 2KB
+int databufferLength = 0;       // Initialize the buffer length
 //
 //
 //  Fram System information file setup
@@ -1821,6 +1827,8 @@ void CameraCleanReturn() {                              //Clean up Camera setup 
   //
   Serial.println(filenameS);
   //
+  EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);     //reset the IRQ Flag
+  attachInterrupt(digitalPinToInterrupt(SerialIRQin), Hostinterupt, FALLING);
 }
 //
 //++++++++++++++++++++++++++++++++++++++++++
@@ -1954,7 +1962,7 @@ int cmd_ana() {                      //command to upload a file to the Host use 
 //file on disk = {FileID[0],FileType,'5','4','3','2','1','.','j','p','g'};   //type S,P,D
 //
 int cmd_takeSphoto() {        //19 - take a serial photo get a file name then place it in the Host Queue
-  Serial.println("Got to cmd_takeSphoto() -- line 1921>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+  Serial.println("cmd_takeSphoto()");
   //
   Serial.print("P0Maddress = ");                //testing out put
   Serial.println(readintFromfram(PCSaddress));
@@ -2000,9 +2008,6 @@ int cmd_takeSphoto() {        //19 - take a serial photo get a file name then pl
   //
   // now have name and size...
   // now have the information to put into Queue
-
-  Serial.println("Got past cmd_sphoto() --- line 1890>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-
   // Status = Status | Bank0status;            //data in bank 0
   // Serial.print("Setting Buffer 0 status to = ");
   //  Serial.println(Status, HEX);
@@ -2242,13 +2247,10 @@ void  softuartwrite(uint8_t data) {
 //
 //
 void Hostinterupt() {
-  Pulse13low(); //
   if (IRQinvalid == 1) {      //is this edge a valid IRQ check for invalid
-    IRQinvalid = 0;         //yes invalid reset the invalid flag
-    //       Pulse13low();           //testing cause P13 to go low %%%%%%%  indicate invalid IRQ %%%%%%%%%%%%%%%%%%%%%
+    IRQinvalid = 0;           //yes invalid reset the invalid flag
   }
   else {
-    // Pulse13low(); //
     ////////////////////////////////////////////////////////////////////////
     //  here every falling edge of host serial in
     //  if the time is greater then it must be a new FmHostRequest from the
@@ -2256,132 +2258,118 @@ void Hostinterupt() {
     //  Note: millis do not count in IRQ, counts outside IRQ
     //
     if (millis() - IRQreference > ArmFmHostRequest) {   //must be greater than FmHostRequest Arm time to process it
-
-      IRQreference = millis();                    //capture millis for next time, start of interrupt
-      Chardelay();                                //wait one charator time for Host to process
-      softuartwrite(Ack);                         //Acknowledge attention send Ack of low on receive line
+      IRQreference = millis();                          //capture millis for next time, start of interrupt
+      Chardelay();                                      //wait one charator time for Host to process
+      softuartwrite(Ack);                               //Acknowledge attention send Ack of low on receive line
       //this will release the serialin line and cause the Host to pull
       //the serialin line high
       //check here that the serial line goes back high, if not Host error and abort the IRQ
-      int long masterlowabort = valuemasterlowabort;       //init abort timeout Host low pulse over max time
-      while (digitalRead(SerialIRQin) == LOW) {           //check for Host low after the edge is Host OK
-        masterlowabort --;                              //dec the low time counter
-        if (masterlowabort = 0) {                       //check for time out, must be error
-          Serial.println("Error Host low to long");     //say error on terminal
-          //                   Pulse13high();           //testing  P13 high abort %%%%%%%%%%%%%%%%%%%%%%%%%%%
-          EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);     //reset the IRQ Flag
-          return;                                       //return From IRQ
+      int long masterlowabort = valuemasterlowabort;        //init abort timeout Host low pulse over max time
+      while (digitalRead(SerialIRQin) == LOW) {             //check for Host low after the edge is Host OK
+        masterlowabort --;                                  //dec the low time counter
+        if (masterlowabort = 0) {                           //check for time out, must be error
+          Serial.println("Error Host low to long");         //say error on terminal
+          EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);         //reset the IRQ Flag
+          return;                                           //return From IRQ
         }   //end abort
       }   //end while
       //
       // Host Serial in line is high, now get the serial byte being sent from the Host, if not sent in time abort
       FmHostRequest = softuartread();                     //wait for FmHostRequest from master controller
       if (softuarterror == 1) {                           //Timeout processing if FmHostRequest does not come in abort
-        Serial.println("FmHostRequest timeout error");  //send error after IRQ
-        //                Pulse13high();           //testing  P13 high abort %%%%%%%%%%%%%%%%%%%%%%%%%%%
-        EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //reset the IRQ Flag
-        return;                                        //return From IRQ
+        Serial.println("FmHostRequest timeout error");    //send error after IRQ
+        EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);         //reset the IRQ Flag
+        return;                                           //return From IRQ
       }   // end softerror
       //
       //--------------------
       //  FmHostRequest processing, reject all invalid FmHostRequests
       //--------------------
+      //
       if ((!softuarterror) == 1) {                //if no error from soft uart fail safe
-        if (FmHostRequest == GetStatus) {     //check the Host request for Get Status request
-          Chardelay();                //Is Status wait one charator delay for system sync and processing
-          Chardelay();                //wait one charator delay for system sync and processing
+        if (FmHostRequest == GetStatus) {         //check the Host request for Get Status request
+          Chardelay();                            //Is Status wait one charator delay for system sync and processing
+          Chardelay();                            //wait one charator delay for system sync and processing
           //
           // what is the status of the output Que
           //
           getQueStatus();
           if (getQueStatus() == 0) {
-            softuartwrite(0x21);      // Que has a file waiting
+            softuartwrite(0x21);                  // Que has a file waiting
             Serial.println("Que something");
-          }
+          }                                       //end Que Waiting
           else {
-            softuartwrite(0x20);      //Que has no file waiting
+            softuartwrite(0x20);                  //Que has no file waiting
             Serial.println("Que empty");
-          }
-          // softuartwrite(Status);      //send status via softserial to master controller
-        }
+          }                                       //end Que empty         
+        }                                         //end GetStatus command
         //=====================================================================================
         if (FmHostRequest == SetTime) {
-          TempReg0 = 0;               //clear to use as pointer into array
-          while (TempReg0 < 6) {                    //Get 6 bytes of time
-            RTCarray[TempReg0] = softuartread();  //receive byte and place into array
-            TempReg0++;                           //inc pointer
-            if (softuarterror == 1) {             //check for serial time out
-              Serial.println("TIME timeout error");  //Say error
-              //                        Pulse13high();           //testing  P13 high abort %%%%%%%%%%%%%%%%%%%%%%%%%%%
-              EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
-              return;                                        //return From IRQ
-            }                                    //end softuart error
-          }                                        //  end while
-          Serial.print("\r\nSetTime ");            //testing only output the time array
-          for (int i = 0; i < 6; i++) {            //Print out the time with spaces
-            Serial.print(RTCarray[i], HEX);       // s m h d m y
+          TempReg0 = 0;                                     //clear to use as pointer into array
+          while (TempReg0 < 6) {                            //Get 6 bytes of time
+            RTCarray[TempReg0] = softuartread();            //receive byte and place into array
+            TempReg0++;                                     //inc pointer
+            if (softuarterror == 1) {                       //check for serial time out
+              Serial.println("TIME timeout error");         //Say error
+              EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);     //abort reset the IRQ Flag
+              return;                                       //return From IRQ
+            }                                               //end softuart error
+          }                                                 //  end while
+          Serial.print("\r\nSetTime ");                     //testing only output the time array
+          for (int i = 0; i < 6; i++) {                     //Print out the time with spaces
+            Serial.print(RTCarray[i], HEX);                 // s m h d m y
             Serial.print(" ");
-          }                                        //  end int
-          Serial.println();                        //do carrage return for formatting
-          for (int i = 0; i < 20; i++) {
-            Chardelay();                          //delay to let master to recover 10ms
-          }                                        //  end chardelay
-          softuartwrite(Ack);                     //send ack to host to complete transfer
-
-        }                                             //  end SetTime
+          }                                                 //end terminal print out
+          Serial.println();                                 //do carrage return for formatting
+          for (int i = 0; i < 20; i++) {                    //wait 20 chara times
+            Chardelay();                                    //delay to let master to recover 10ms
+          }                                                 //  end chardelay
+          softuartwrite(Ack);                               //send ack to host to complete transfer
+        }                                                   //  end SetTime
         //=============================================================================
-        if (FmHostRequest == Ack) {
-          Chardelay();           //delay to let master to recover
-          Chardelay();           //delay to let master to recover
-          softuartwrite(Ack);
-          //               Pulse13high();           //testing  P13 high abort %%%%%%%%%%%%%%%%%%%%%%%%%%%
-          EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
-          return;                                        //return From IRQ  +l
-        }                          //  end Ack
+        if (FmHostRequest == Ack) {                     //is it an Ack
+          Chardelay();                                  //delay to let master to recover
+          Chardelay();                                  //delay to let master to recover
+          softuartwrite(Ack);                           //Send Ack back
+          EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);     //abort reset the IRQ Flag
+          return;                                       //return From IRQ  +l
+        }                                               //  end Ack
         //
         //============================================================================
-        if (FmHostRequest == GetV0) {
+        if (FmHostRequest == GetV0) {               //is it a get status command
+          FileReadError = 0;                        //reseet error if set
           //
-          //Pick up next photo/text to output to Host from photo/Text file list....
-          //   Now just deal with buffer 0  for growth testing
+          //   here get file name from Queue and inc Que
           //
-          FileReadError = 0;                                  //reseet error if set
-          //
-          //
-          //--------------------------
-          //
-          //   here get file name from Queue
-          //   inc Queue
-          //
-          getQueStatus();             //make sure there is something in Que, error in not
-          if (getQueStatus() == 1) {
-            Serial.println("Requested but nothing in Que");
-            //retutn 0;
+          getQueStatus();                           //Check the Que for a File name
+          if (getQueStatus() == 1) {                //check for empty
+            Serial.println("Que empty");            //say Que is empty on terminal
           }
-          else {            //something in Queue
-            Serial.print("got to Que");                       //here, a file name in que
-            uint16_t retval;                                  //meke return error test reg
-            retval = getFilefromQue(args[1]);                 //get the file name in args[1]
-            if (retval == 0) {                                //returned value ==0, got a regonized name
-              Serial.print("got a filename:");                //sayso
-              Serial.println(args[1]);                        //print out the name
+          else {                                          //something in Queue
+            //Serial.print("got to Que");                   //here, a file name in que
+            uint16_t retval;                              //meke return error test reg
+            retval = getFilefromQue(args[1]);             //get the file name in args[1]
+            if (retval == 0) {                            //returned value ==0, got a regonized name
+              //Serial.print("got filename:");              //sayso
+              //Serial.println(args[1]);                    //print out the name
             } else {
-              Serial.println("err: got no filename");         //error does not know file
+              Serial.println("err: got no filename");     //error does not know file
+              EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);   //abort reset the IRQ Flag
+              return;                                     //return From IRQ  +l             
             }
             //
-            for (int i = 0; i < 10; i++) {
-              softuartwrite(args[1][i]);                    //send Header to Host(has length)
+            for (int i = 0; i < 10; i++) {                  //Send - Que Header to Host
+              softuartwrite(args[1][i]);                    //do it for the length of Header
             }
             photobytecount = (args[1][8]) * 256;            //let's get photo byte count from header
             photobytecount = photobytecount + (args[1][9]); //lsb
             //
             args[1][7] = '\0';                              //remove none file info from header
-            strcat(args[1], (".jpg"));                       // append type of file name
-            Serial.println (args[1]);                        //lets print the filename to know
+            strcat(args[1], (".jpg"));                      // append type of file name to access SD 
+            Serial.println (args[1]);                       //lets print the filename to know
             //
             Chardelay();           //delay to let master to recover
             Chardelay();           //delay to let master to recover
-
             //
             // now open photo file to send
             //
@@ -2391,98 +2379,96 @@ void Hostinterupt() {
               Abortphoto = 0;                   //-------- No abort test ---------
               //                   photobytecount = photobytecount-1;  //photo count -1 for techque
               while (photobytecount > 0) {
-                if (Abortphoto == 1) {   //---- test ----
+                if (Abortphoto == 1) {                           //---- test for abort ----
                   EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
                   return;                                        //return From IRQ
                 }                       //  end abort
-                while (photobytecount > 1024) {              //Send photo data to Host in 1024 blocks
-                  if (Abortphoto == 1) {   //---- test ----
-                    EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
-                    return;                                        //return From IRQ
-                  }                       //end abort
+                while (photobytecount > 1024) {                 //Send photo data to Host in 1024 blocks
+                  if (Abortphoto == 1) {                        //---- test for abort ----
+                    EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);   //abort reset the IRQ Flag
+                    return;                                     //return From IRQ
+                  }                                             //end abort
                   for (int x = 0; x < 1024; x++) {        //for the length of photolength buffer send
                     softuartwrite(dataFile.read());       //read fm SD and send jpg file to Host here
                     photobytecount--;                     //dec total byte count
-                  }                       //end 1024
+                  }                                       //end 1024 last clump
                   char y = softuartread();                //wait for acknowledge of 1024 bytes
-                  if (y != 0x5A) {
+                  if (y != 0x5A) {                        //check to acknowledge Ack
                     Serial.println("Not 0x5A (ACK) during photo upload !!!!");
                     EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
                     return;                                        //return From IRQ
                   }
-                  Serial.print("*");             //testing
+                  Serial.print("*");                      //testing send for each 1024
                   if (softuarterror == 1) {
-                    Serial.println("softuarttimeout photo");//set timeout error
+                    Serial.println("softuarttimeout photo");       //set timeout error
                     EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
                     return;                                        //return From IRQ
-                  }                              //  end softerror
+                  }                                 //  end softerror
                 }                                   //  end while
                 while (photobytecount > 0) {                //send last less than 1024 bytes
                   softuartwrite(dataFile.read());           //send it
                   photobytecount--;                         //looking for 0
-                }                                   //  end while
-              }                                       //  end photocount
+                }                                           //  end while
+              }                                             //  end photocount
               dataFile.close();                   //close the photo data file data file
-            }                                           //  end datafile
+            }                                     //  end datafile
             else {                                 //error opening file
               Serial.println("error opening photo file to Host- = ");
               Serial.println(args[1]);
-              Pulse13high();           //testing  P13 high abort %%%%%%%%%%%%%%%%%%%%%%%%%%%
               EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
               return;                                        //return From IRQ
             }
             //
-            //---------wait ?? -------------------------------------------------------------------------
-            //
-            for (int x = 0; x < 4; x++) {            //delay time between jpg and txt file---------------------
+            for (int x = 0; x < 4; x++) {            //delay time between jpg and txt file----
               Chardelay();
             }                               //end int
             //
             //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-            //++++++++++  Need to send text file to Host controller
+            //++++++++++ Send text file to Host controller
             //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
             //
-            if (FileReadError == 0) {                           //abort if open or read error
-              int x = strlen(args[1]);                      //get the length of the name + ext
+            if (FileReadError == 0) {                       //abort if open or read error
+              int x = strlen(args[1]);                      //get the  name + ext of file
               args[1][x - 3] = ('t');                       //rewrite extension to txt
-              args[1][x - 2] = ('x');
+              args[1][x - 2] = ('x');                       //replace jpg with txt
               args[1][x - 1] = ('t');
               TextFile = SD.open(args[1]);
-              if (TextFile) {
-                int x;
-                while (TextFile.available()) {
-                  Chardelay();
-                  x = (TextFile.read());         //send it
-                  softuartwrite(x);
-                  Serial.write(x);
+              if (TextFile) {                               //Check for file exist
+                int x;                                      //file exist need counter
+                while (TextFile.available()) {              //for file length 
+                  Chardelay();                              //delay between text char
+                  x = (TextFile.read());                    //get it from file
+                  softuartwrite(x);                         //send to host
+                  Serial.write(x);                          //Send it to Terminial for human
                 }                             //end while
                 softuartwrite(0xFF);          //force end of text file
                 softuartwrite(0xFF);          //always force end of text file for sure
-                TextFile.close();
+                TextFile.close();             //close the open text file
               } else {                                //end TextFile then else
-                Serial.println("error opening TextFile to Host = ");
-                Serial.println(args[1]);
-                EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);      //abort reset the IRQ Flag
-                return;                                        //return From IRQ
+                Serial.println("error opening TextFile to Host = ");    //send error to terminal
+                Serial.println(args[1]);                                //which file does not exist
+                EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);               //abort reset the IRQ Flag
+                return;                                                 //return From IRQ
               }                                  //end of else
-            }                                      //end if FileReadError==0
-            if (FileReadError == 0) {                           //abort if open or read error
-              Serial.print("\n\rDone ");
-              Serial.print(Status, HEX);
-              Status = 0x20;            //reset Data availiable
-            }                             //end FileReadError==0
-          }                                 //end GetV0
+            }                                    //end if FileReadError==0
+            if (FileReadError == 0) {                           //if no abort from above
+              Serial.print("\n\rDone ");                        //send Done with text to terminal
+              Serial.print(Status, HEX);                        //
+              Status = 0x20;                    //reset Data availiable
+            }                                   //end FileReadError==0
+          }                                     //end else something in Que
           // Here if FmHostRequest is known or unknown
-          Serial.print("FmHostRequest from host = ");
+          Serial.print("\n\rRequest from host was = ");
           Serial.println(FmHostRequest, HEX);
         }                               //end softuarterror=1
         softuarterror = 0;              //reset error to no error data ok###################################
       }                               //end milli-IRQreference
     }                                 //end millis test
     IRQinvalid = 0;
-    Pulse13high();
   }                                    //end of else
-}                                     //end of Hostinterrupt
+  EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);               //abort reset the IRQ Flag
+  return;                                                 //return From IRQ
+}                                                         //end of Hostinterrupt
 //
 //FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
@@ -2919,6 +2905,8 @@ int cmd_takeSpiphoto() {
   Serial.println("SPI Camera Test Command");
   digitalWrite(SPI_cam_Power, SPIcamON);          //camera power on here
   int x = takeSPI();
+  EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);     //reset the IRQ Flag
+  attachInterrupt(digitalPinToInterrupt(SerialIRQin), Hostinterupt, FALLING);
   digitalWrite(SPI_cam_Power, LOW); //camera power off here ??????????
   Serial.println(x, HEX);
 
@@ -3186,20 +3174,196 @@ uint8_t Getchar() {
   }
   return 0;
 }
-
 //=============================================================================
 //
 int ReadSetup() {
   Serial.print("\rthis Module ID is = "); Serial.println(readIDfram());
   return 0;
-
 }
 //
+//FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 //
-//*****************************************************************************
 //
 //
-
+void nophoto30K(){
+  Serial.println("nophoto30K");
+//----- get next PCD file count -----
+  int x = (readintFromfram(PCDaddress));    //get next data photo number
+  x++;                                      //inc the number
+  if (x > 99999) {                          //check for over max reset
+    x = 0;                                  //resset to O
+  };                                        //end check for max
+  writeintfram(x, PCDaddress);              //inc and write for next time 
+  //----- convert photo count to string -----
+  itoa(x, ascii, 10);                       //convert PCD photo count x to ascii string
+  int z = 0;                                //to count number of valid entries in array
+  for (int i = 0; ascii[i] != '\0'; i++) {  //want to find null char
+    z++;                                    //not found inc Z for digits
+  };                                        //end find null char, z now points to pointer
+  //----- ascii photo number to file name -----
+  uint16_t  y = 7 - z;                     //where to place lsd in mission buffer
+  for (uint16_t x = 0 ; x < z; x++) {      //how many charators
+    filenameD[y] = ascii[x];               //transfer from aacii array to proper location in text_mission
+    y++;                                   //pointer to text_mission array
+  }                                        //end text number
+  //----- place team ID on file name -----
+    filenameD[0] = readbyteFromfram(ID);    //Get team ID letter, place it as first letter of file name
+  //
+  //----- Serial.println(filenameS) is complete and ready to use as name on file
+  //----- clear args[1] to 0 -----
+  for (int x = 0; x < 10; x++) {            //clear args[1]
+    args[1][x] = '\0';                      //clear args[1]
+  }                                         //end clear args[1]
+  //----- Move filename into args[1] for further processing
+  for (int x = 0; x < 7; x++) {             //move number of chartors
+    args[1][x] = filenameD[x];              //move the filenameD into args[1]
+  }                                         //end move numbers
+  //-----  add .jpg extension to file name in args[1]
+//  Serial.println (args[1]);                 //output the file name part of the header no extension for test
+  x = strlen(args[1]);                      //get the length of the name + ext
+  args[1][7] = ('.');                       // add extension
+  args[1][8] = ('j');                       //rewrite extension to jpg
+  args[1][9] = ('p');
+  args[1][10] = ('g');
+//  Serial.println(args[1]);                  //print full file name  for test
+//
+//----- write databuffer data to SD card with name -------
+//
+  File dataFile = SD.open(args[1], FILE_WRITE);       //open to save nophoto dara in file
+  if (dataFile) {                                     //check if file was created  
+     while (strlen(databuffer)<=1030){
+        strcat(databuffer, "-");                    //fill with space 
+     }
+     for (uint16_t x=0;x < (strlen(databuffer));x++){                 //yes, it was created send nophoto data to sd
+        dataFile.write(databuffer[x]);                   //write the data to SD here
+     }                                                   //end nophoto write
+  
+  }                                                   //end dataFile
+  else {                                              //here for error in create
+    Serial.println("error opening data file");        //say so error on terminal
+  }                                                   //end error else
+  dataFile.close();                                   //close the dataFile here
+//
+//-----  write output text and place file name in output Que -----
+//
+  FsDateTime::setCallback(dateTime);                //set time and date for file************************************
+  WriteText();                                      //write text file to sd card
+  x = strlen(args[1]);                             //get the length of the name + ext
+  args[1][x - 4] = ('\0');                         //rewrite extension from jpg to header header info
+  args[1][7] = ('P');
+  args[1][8] = (((strlen(databuffer))) / 256);        //rewrite extension to jpg
+  args[1][9] = (((strlen(databuffer))) % 256);
+//  Serial.print("size of 30K buffer = ");
+//  Serial.println(strlen(databuffer));  
+  args[1][10] = ('\0');
+  Serial.println(args[1]);
+  
+//  Serial.print (args[1]);                    //output the file name part of the header  for test 
+  addFileToQueue(args[1]);                     //add this file and text to the output que.....
+  // cleardatabuffer();                          //start with a clear databuffer
+  databufferLength = 0;                                       //reset length of buffer to 0
+  memset(databuffer, 0, sizeof(databuffer));                  //reset the full databuffer to 0
+//11/06  
+//  String str1 = "file name sent to no photo 30K Que =";
+//  String result = str1 + args[1];
+//  logEntry(result);
+//11/06
+//
+//  Serial.println(result);
+}                                   
+//
+//FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+//  Clear databuffer to 0
+//
+void cleardatabuffer() {                                      //enter to clear databuffer to 0
+// Clear the buffer by resetting its length to 0
+  databufferLength = 0;                                       //reset length of buffer to 0
+  memset(databuffer, 0, sizeof(databuffer));                  //reset the full databuffer to 0
+}
+//
+//FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+//  make nophoto photo,  just send nophoto and text  make on sd 
+// take photo time with no camera just send nophoto photo and text output
+// 
+// 
+void nophotophoto(){
+  Serial.println("nophotophoto");
+//----- get next PCD file count -----
+  int x = (readintFromfram(PCDaddress));    //get next data photo number
+  x++;                                      //inc the number
+  if (x > 99999) {                          //check for over max reset
+    x = 0;                                  //resset to O
+  };                                        //end check for max
+  writeintfram(x, PCDaddress);              //inc and write for next time 
+  //----- convert photo count to string -----
+  itoa(x, ascii, 10);                       //convert PCD photo count x to ascii string
+  int z = 0;                                //to count number of valid entries in array
+  for (int i = 0; ascii[i] != '\0'; i++) {  //want to find null char
+    z++;                                    //not found inc Z for digits
+  };                                        //end find null char, z now points to pointer
+  //----- ascii photo number to file name -----
+  uint16_t  y = 7 - z;                     //where to place lsd in mission buffer
+  for (uint16_t x = 0 ; x < z; x++) {      //how many charators
+    filenameD[y] = ascii[x];               //transfer from aacii array to proper location in text_mission
+    y++;                                   //pointer to text_mission array
+  }                                        //end text number
+  //----- place team ID on file name -----
+    filenameD[0] = readbyteFromfram(ID);    //Get team ID letter, place it as first letter of file name
+  //
+  //----- Serial.println(filenameS) is complete and ready to use as name on file
+  //----- clear args[1] to 0 -----
+  for (int x = 0; x < 10; x++) {            //clear args[1]
+    args[1][x] = '\0';                      //clear args[1]
+  }                                         //end clear args[1]
+  //----- Move filename into args[1] for further processing
+  for (int x = 0; x < 7; x++) {             //move number of chartors
+    args[1][x] = filenameD[x];              //move the filenameD into args[1]
+  }                                         //end move numbers
+  //-----  add .jpg extension to file name in args[1]
+//  Serial.println (args[1]);                 //output the file name part of the header no extension for test
+  x = strlen(args[1]);                      //get the length of the name + ext
+  args[1][7] = ('.');                       // add extension
+  args[1][8] = ('j');                       //rewrite extension to jpg
+  args[1][9] = ('p');
+  args[1][10] = ('g');
+//  Serial.println(args[1]);                  //print full file name  for test
+//
+//----- write nophoto data to SD card with name -------
+//
+  File dataFile = SD.open(args[1], FILE_WRITE);       //open to save nophoto dara in file
+  if (dataFile) {                                     //check if file was created   
+     for (uint16_t x=0;x < 1408;x++){                 //yes, it was created send nophoto data to sd
+    dataFile.write(NophotoData[x]);                   //write the data to SD here
+  }                                                   //end nophoto write
+  }                                                   //end dataFile
+  else {                                              //here for error in create
+    Serial.println("error opening data file");        //say so error on terminal
+  }                                                   //end error else
+  dataFile.close();                                   //close the dataFile here
+//
+//-----  write output text and place file name in output Que -----
+//
+  FsDateTime::setCallback(dateTime);                //set time and date for file************************************
+  WriteText();                                      //write text file to sd card
+  //
+  x = strlen(args[1]);                             //get the length of the name + ext
+  args[1][x - 4] = ('\0');                         //rewrite extension from jpg to header header info
+  args[1][7] = ('P');
+  args[1][8] = (sizeof(NophotoData) / 256);        //rewrite extension to jpg
+  args[1][9] = (sizeof(NophotoData) % 256);
+  args[1][10] = ('\0');
+//  Serial.print (args[1]);                         //output the file name part of the header  for test 
+  addFileToQueue(args[1]);                        //add this file and text to the output que.....
+  
+//11/06  
+// String str1 = "file name sent from nophoto Que =";
+// String result = str1 + args[1];
+//logEntry(result);
+//11/06
+//  Serial.println(result);
+}                                                 //all done got filename, loaded data, and entered Que
+//=======================================================================================================
+//
 
 
 

@@ -13,8 +13,8 @@ digitalWrite(DotStarDATAPIN,HIGH);    //Set DataStar data pin to High
 pinMode(DotStarCLOCKPIN,OUTPUT);      //Set DataStar clock pin to output
 digitalWrite(DotStarCLOCKPIN,HIGH);   //Set DataStar clock pin to High
 //
-pinMode(testPIN, OUTPUT);             //
-digitalWrite(testPIN,LOW);            //
+//pinMode(testPIN, OUTPUT);             //
+//digitalWrite(testPIN,LOW);            //
 }
 
 //
@@ -67,8 +67,8 @@ void DotStarSendByte(uint8_t value){      //Send MSB first
     delayMicroseconds(1);                   //wait 1 microsec
     value = value<<1;                       //shift left 1 bit for next
   }
-  digitalWrite(testPIN,HIGH);               //test pin to high
-  digitalWrite(testPIN,LOW);                //test pin to low
+ // digitalWrite(testPIN,HIGH);               //test pin to high
+ // digitalWrite(testPIN,LOW);                //test pin to low
 }
 //
 // Send a Frame of data to DotStar
