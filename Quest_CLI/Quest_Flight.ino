@@ -1,15 +1,39 @@
-/**
- * 
- *                 20231110 Version 1.0
-   @file flying.ino
-   @author howell ivy
-   @brief Logic for experiment My-Cool-Experiment
-   @version 1.0
-   @date 2023-07-15
-
-  20231120 CLI_V1.0 Required to make a complete program - this file, CLI_V1.0,Quest_CLI.h, Quest_Flight.h,Quest_flight.cpp
-                  cmd_takeSphot , cmd_takeSpiphoto, nophotophoto, nophoto30K --,clean up code for understanding.
-                  
+/*
+****************************************************************************************
+****************************************************************************************
+20231121
+Files Required to make a complete program - 
+  CLI_V1.0, Quest_CLI.h, Quest_Flight.h, Quest_flight.cpp
+      Important Functions and their use:
+          cmd_takeSphot
+              This function will use the serial camera (the one with the cable) to take a photo (jpg)
+              on the transfer of this photo to the Host controller it will create a text file (txt)
+              with the same file name as the jpg file of the conditions of when the jpg was taken.
+              NOTE: add2text can be used with this command
+          cmd_takeSpiphoto
+              This function is for the SPI camera (the one that plugges directly on the microlab board)
+              it will take a jpg the same as the serial camera, also creating a txt file.  Also NOTE: the
+              add2text function can be used on the photo text file.
+          nophotophoto
+              if a camera is not being used, then this will simulate the camera photo operation. The text file 
+              is still created, so the add2text function can be used the get data downloaded in the text file
+          nophoto30K
+              this dois not use a camera, instead it uses the file space for the photo the containe ascii data
+              using dataappend function defined below.  The data will still have a jpg etension, but the file
+              will contain ascii of the data put in buy the dataappend unction. Plus a text file is generated,
+              and the add2text function will add more data.
+          -----
+          add2text(int value1,int value2,int value3)
+              this function will take the three varables and place them at the end of the text file (the file is
+              limited the 1024 charators),  if you look at the function the text output can be formatted is almost
+              any way.  Look at it and change it to acccomadate your data...
+          dataappend(int counts,int ampli,int SiPM,int Deadtime)
+              this function will add ascii data to the 30K byte data buffer that was used a a jpg photo.  look at
+              the data formating and change it necessary for you project information.  To view the data, you can
+              use a hex/ascii file viewer or change the ext to a txt.  then it should be viewable with a text exitor.
+.
+******************************************************************************************                                   
+******************************************************************************************                  
 */
 
 #include "Quest_Flight.h"
@@ -48,8 +72,8 @@
 //
 //
 void Flying() {
-  Serial.println("Here to Run flight program, not done yet 20230718");
-  Serial.println(" 20231116 working on it");
+  //
+  Serial.println("\n\rRun flight program\n\r");
   //
   uint32_t TimeEvent1 = millis();               //set TimeEvent1 to effective 0
   uint32_t Sensor1Timer = millis();             //clear sensor1Timer to effective 0

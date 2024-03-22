@@ -41,14 +41,17 @@
                   user_text buffer text size same now.. Need to clean up code for humans..
   20231120 CLI_V1.0 Required to make a complete program - this file, CLI_V1.0,Quest_CLI.h, Quest_Flight.h,Quest_flight.cpp
                   cmd_takeSphot , cmd_takeSpiphoto, nophotophoto, nophoto30K --,clean up code for understanding.
-
+  20231207 CLI_V1.1 Required to make a complete program - this file, CLI_V1.1,Quest_CLI.h, Quest_Flight.h,Quest_flight.cpp
+                  Fixed Bug of crrupted file names when being uploaded to the McMek.  added terminal countdown for the "T" 
+                  command during startup.  Only affected file is CLI.V1.1 all other files
+                  do not need to change...Flight or libraries...
  * *****************************************************************************
 */
 //
-int Qversion = 20230715;  //Program version
+char Qversion [] = "CLI_V1.1";  //Program version
 const char compile_date[] = __DATE__ " " __TIME__;
 const char source_file[] = __FILE__;
-
+//
 //-----includes--------------------
 #include <Wire.h>
 #include <i2cdetect.h>
@@ -634,9 +637,9 @@ void setup() {
   //
   //
   Serial.println("\r\n\n----------------------------------------------------------");
-  Serial.println("\nSystem Startup - S3_40 Testing Command line interface 20220710");
+  Serial.println("\nSystem Startup - S3_40 Testing Command line interface CLI_V1.1");
   Serial.println("interface not complete, look for future cleaner updates, Thank you!");
-  Serial.println("add to change this is your playground to learn the S3_40 system\n");
+  Serial.println("add to change this is your flight playground to learn the S3_40 system\n");
   //
   //------------ set digital IO to output and high ------------
   pinMode(IO7, OUTPUT);      //
@@ -709,31 +712,7 @@ void setup() {
   Serial.println("SD installed OK");
   initSD();                             //set up SD files and system files for operation
   //
-  /*
-    //----------------------------------------------------------------------
-    //-------- Check for Cumulitive Mission Time file if no exist Create it
-    //
-    File CumMisClk = SD.open("CumMisClk.txt");   //name of file
-    if (CumMisClk){
-      Serial.println("CumMisClk file exist");
-    }
-    else{
-      Serial.println("Made CumMisClk file");
-      FsDateTime::setCallback(dateTime);            //set time and date for file
-      File CumMisClk = SD.open("CumMisClk.txt", FILE_WRITE);
-      str=String(1);
-          Serial.println(str);
-          str.toCharArray(text_buf,11);
-          CumMisClk.print(text_buf);
-
-      }
-    CumMisClk.close();
-    //
-    Serial.println("CumMisClk.tct written");
-  */
   //----------------------------------------------------------------------
-  //
-  //
   //----------- System test flages ---------------------------------------
   //
   testing = false;    //reset active command line processing flag
@@ -755,13 +734,12 @@ void loop() {
   Serial.println();
   Serial.print("Free Memory = "); Serial.print(freeMemory(), HEX);
   Serial.print(" HEX or "); Serial.print(freeMemory()); Serial.println(" DEC");
-  cmd_stackandheap();
   //
-
   Serial.println("\r\n\nInput 'T' to enter test within 15 seconds");
   //
   uint32_t currentMillis = millis();          //this is time now
-
+  uint16_t countdown = 15;                    //tet countdown clock
+  long unsigned int milliscountdown = millis();       //countdown counter for test
   //??????????????????????????????????????????????????????????????????????????????????????????????????????
   //   test for Flying();                           //Set Flying active and go to flight programming
   //??????????????????????????????????????????????????????????????????????????????????????????????????????
@@ -775,6 +753,11 @@ void loop() {
         my_cli();                               //execute test command line processor
         SoftwareReset();
       }
+    }
+    if(millis() - milliscountdown > 1000){      //count every second in waiting for test
+        milliscountdown = millis();
+        countdown--;                            //decrease count for test
+        Serial.print("Enter 'T' for test else enter flying  Wait time = "); Serial.print(countdown); Serial.print("   version = ");Serial.println(Qversion);
     }
   }
   if (testing == true) {
@@ -2350,8 +2333,9 @@ void Hostinterupt() {
             uint16_t retval;                              //meke return error test reg
             retval = getFilefromQue(args[1]);             //get the file name in args[1]
             if (retval == 0) {                            //returned value ==0, got a regonized name
-              //Serial.print("got filename:");              //sayso
-              //Serial.println(args[1]);                    //print out the name
+             // Serial.print("got filename:");              //sayso
+             // Serial.println(args[1]);                    //print out the name
+              Chardelay();           //delay to let master to recover
             } else {
               Serial.println("err: got no filename");     //error does not know file
               EIC->INTFLAG.reg = EIC_INTFLAG_EXTINT(0);   //abort reset the IRQ Flag

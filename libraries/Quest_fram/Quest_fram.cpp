@@ -175,7 +175,7 @@ int initfram(){
   Serial.println("\n\rFram Memory bad or not intalled\r\n Program will not function correctly\n\r");
  } 
   Serial.println("Initing Fram Memory");
-  writeIDfram('B');                              //default ID = XY into Fram
+  writeIDfram('I');                              //default ID = XY into Fram
   //
  // uint16_t x =  readIDfram();
  // if(x!=0x5859){
@@ -188,7 +188,8 @@ int initfram(){
   writeintfram( 0, Resetaddress);
   writeintfram( 0, PCSaddress); 
   writeintfram( 0, PCPaddress); 
-  writeintfram( 0, PCDaddress);   
+  writeintfram( 0, PCDaddress);
+  writeintfram( 0, W24HOURS);   
   //
   // head of Que pointer
 //  writelongfram(0x55555555, CumUnix);       //total unix
@@ -202,6 +203,7 @@ int initfram(){
   Serial.print("PCSaddress = ");Serial.println(PCSaddress);
   Serial.print("PCPaddress = ");Serial.println(PCPaddress);
   Serial.print("PCDaddress = ");Serial.println(PCDaddress);
+  Serial.print("W24HOURS = ");Serial.println(W24HOURS);
 //
   Serial.println("***** TEAM ID MUST NOW BE SET *****");
   return 0; 

@@ -40,6 +40,7 @@ const uint16_t PCPaddress = (PCSaddress + PCSsize);          //PCDaddress number
 const uint16_t PCPsize = (2);                                  //Size of PCDaddress
 const uint16_t PCDaddress = (PCPaddress + PCPsize);          //PCMaddress number address Spi photos
 const uint16_t PCDsize = (2);                                  //Size of PCMaddress
+const uint16_t W24HOURS = (PCDaddress+PCDsize);			// Wait 24hour flag 0=not 24 hours yet
 //
 //
 //const statement[] = "this is an array in fram"

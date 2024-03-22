@@ -186,7 +186,7 @@ bool QuestCameraC329SPI::getPictureSPI(PictureType pictureType, void (*callback)
 {
   uint32_t pictureSize = 0;
 
-  resetSPI(RT_STATE);		//hai
+ // resetSPI(RT_STATE);		//hai
 
 //  while (!waitForACK(SPIRESPONSE_DELAY, CMD_GETPICTURE) && ack_counter < 100) {
 //    delay(10);

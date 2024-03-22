@@ -72,7 +72,7 @@ class QuestCameraC329SPI
       CT_RGB16 = 0x06,
       CT_RGB24 = 0x08,
       CT_YUV16 = 0x09,
-      CT_JPEG = 0x07
+      CT_JPEG = 0x87
     };
     enum PreviewResolution
     {
@@ -82,7 +82,7 @@ class QuestCameraC329SPI
       PR_176x144 = 0x04,
       PR_320x240 = 0x05,
       PR_352x288 = 0x06,
-      PR_640x480 = 0x87,
+      PR_640x480 = 0x07,
       PR_80x64 = 0x08,
       PR_128x96 = 0x09,
       PR_128x128 = 0x0A,
@@ -96,7 +96,7 @@ class QuestCameraC329SPI
       JR_176x144 = 0x04,
       JR_320x240 = 0x05,
       JR_352x288 = 0x06,
-      JR_640x480 = 0x87,
+      JR_640x480 = 0x07,
       JR_80x64 = 0x08,
       JR_128x96 = 0x09,
       JR_128x128 = 0x0A,
